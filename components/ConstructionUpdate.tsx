@@ -1,90 +1,87 @@
-import React, { useState } from 'react';
-import { generateDescriptionForImage } from '../services/geminiService';
-import { Button } from './Button';
+// ConstructionUpdate.tsx 파일 전체 내용
 
+import React, { useState } from 'react';
+
+// onUpdate 핸들러는 이제 파일 객체 대신 URL 문자열만 받습니다.
 interface ConstructionUpdateProps {
   currentImage: string;
-  onUpdate: (newImageUrl: string) => void;
+  onUpdate: (imageUrl: string) => Promise<void>; 
 }
 
-const fileToBase64 = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => resolve((reader.result as string).split(',')[1]);
-    reader.onerror = error => reject(error);
-  });
-};
-
 export const ConstructionUpdate: React.FC<ConstructionUpdateProps> = ({ currentImage, onUpdate }) => {
-  const [newImageFile, setNewImageFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [altText, setAltText] = useState<string>('');
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [newImageUrl, setNewImageUrl] = useState<string>('');
+  const [isUpdating, setIsUpdating] = useState<boolean>(false);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      setNewImageFile(file);
-      setPreviewUrl(URL.createObjectURL(file));
-      setAltText(''); // Clear previous alt text
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newImageUrl.trim().startsWith('http')) {
+      alert('유효한 이미지 URL(http/https로 시작)을 입력해주세요.');
+      return;
     }
-  };
 
-  const handleGenerateAltText = async () => {
-    if (!newImageFile) return;
-    setIsLoading(true);
+    setIsUpdating(true);
     try {
-      const base64Image = await fileToBase64(newImageFile);
-      const description = await generateDescriptionForImage(base64Image, newImageFile.type);
-      setAltText(description);
+      // App.tsx의 onUpdate 함수에 URL 문자열 전달
+      await onUpdate(newImageUrl.trim()); 
+      setNewImageUrl(''); // 성공 시 입력 필드 초기화
     } catch (error) {
-      console.error(error);
-      setAltText("대체 텍스트 생성 중 오류가 발생했습니다.");
+      console.error("Update error:", error);
+      alert('업데이트 중 오류가 발생했습니다.');
     } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleSaveChanges = () => {
-    if (previewUrl) {
-      onUpdate(previewUrl);
+      setIsUpdating(false);
     }
   };
 
   return (
-    <section className="bg-white p-6 rounded-lg border border-brand-gray-200">
-      <h2 className="text-2xl font-bold mb-4 text-brand-gray-900">공사 현황 업데이트</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-        <div>
-          <h3 className="text-lg font-semibold text-brand-gray-800 mb-2">현재 이미지</h3>
-          <img src={previewUrl || currentImage} alt="Seoul Arena Construction" className="rounded-lg w-full object-cover aspect-video border border-brand-gray-200" />
+    <section className="bg-brand-gray-50 p-6 rounded-lg shadow-lg">
+      <h2 className="text-2xl font-bold mb-4 border-b pb-2">공사 현황 이미지 업데이트 (URL 입력)</h2>
+      
+      <div className="flex flex-col md:flex-row gap-6">
+        {/* 현재 이미지 미리보기 */}
+        <div className="flex-shrink-0 w-full md:w-1/2">
+          <h3 className="text-lg font-semibold mb-2">현재 이미지 미리보기</h3>
+          <img 
+            src={currentImage} 
+            alt="현재 공사 현황 이미지" 
+            className="w-full h-auto object-cover rounded-lg border border-brand-gray-200" 
+            style={{ aspectRatio: '16 / 9' }}
+            // 이미지 로딩 실패 시 대체 이미지 표시
+            onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = 'https://via.placeholder.com/640x360?text=Image+Load+Error'; }}
+          />
+          <p className="text-sm text-brand-gray-600 mt-2 truncate" title={currentImage}>
+            **현재 URL:** {currentImage}
+          </p>
         </div>
-        <div className="flex flex-col space-y-4">
-          <div>
-            <label htmlFor="image-upload" className="block text-lg font-semibold text-brand-gray-800 mb-2">새 이미지 업로드</label>
-            <input 
-              id="image-upload" 
-              type="file" 
-              accept="image/*" 
-              onChange={handleFileChange} 
-              className="block w-full text-sm text-brand-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border file:border-brand-gray-300 file:text-sm file:font-semibold file:bg-brand-gray-50 file:text-brand-gray-700 hover:file:bg-brand-gray-100"
-            />
-          </div>
-          {newImageFile && (
-            <div className="border-t pt-4">
-              <h3 className="text-lg font-semibold text-brand-gray-800 mb-2">생성된 대체 텍스트</h3>
-              <div className="w-full p-3 bg-brand-gray-50 border border-brand-gray-200 rounded-md min-h-[100px] text-brand-gray-800 text-sm">
-                {isLoading ? '생성 중...' : altText || 'AI로 대체 텍스트를 생성하려면 아래 버튼을 클릭하세요.'}
-              </div>
-              <Button onClick={handleGenerateAltText} disabled={isLoading} variant="secondary" className="mt-2">
-                {isLoading ? '생성 중...' : 'AI로 대체 텍스트 생성'}
-              </Button>
+        
+        {/* URL 입력 폼 */}
+        <div className="w-full md:w-1/2">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label htmlFor="imageUrl" className="block text-sm font-medium text-brand-gray-700 mb-2">
+                새 공사 현황 이미지 URL
+              </label>
+              <input
+                id="imageUrl"
+                type="text"
+                value={newImageUrl}
+                onChange={(e) => setNewImageUrl(e.target.value)}
+                placeholder="Imgur, Google Photos 등 외부 이미지 링크를 붙여넣으세요."
+                className="w-full p-2 border border-brand-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                required
+              />
             </div>
-          )}
-          <div className="border-t pt-4">
-             <Button onClick={handleSaveChanges} disabled={!newImageFile}>변경사항 저장</Button>
-          </div>
+            
+            <button
+              type="submit"
+              disabled={isUpdating}
+              className={`w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${isUpdating ? 'bg-brand-gray-500' : 'bg-blue-600 hover:bg-blue-700'} focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500`}
+            >
+              {isUpdating ? '업데이트 중...' : 'URL로 업데이트'}
+            </button>
+          </form>
+          <p className="mt-4 text-xs text-brand-gray-500">
+            *이 방식은 Firebase Storage를 사용하지 않고 외부 이미지 호스팅 서비스의 **직접 URL**을 Realtime Database에 저장합니다.
+          </p>
         </div>
       </div>
     </section>
