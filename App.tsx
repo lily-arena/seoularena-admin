@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { initializeApp } from "firebase/app";
 import { getDatabase, ref, set, push, onValue, remove, DataSnapshot } from "firebase/database";
-import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, User } from "firebase/auth";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, User } from "firebase/auth";
+// Firebase Storage 관련 import 제거됨
 
 // =================================================================
-// 0. 타입 및 상수 정의 (외부 파일 import 대신 내부 정의)
+// 0. 타입 및 상수 정의
 // =================================================================
 
 // NewsArticle 타입 정의
@@ -43,7 +44,7 @@ export const INITIAL_NEWS_ARTICLES: NewsArticle[] = [
   }
 ];
 
-// Firebase 초기화 (중복 정의 제거)
+// Firebase 초기화
 const firebaseConfig = { 
   apiKey: "AIzaSyDDMRJ9xVU79BPN6gF0KsEf4N1sQJeuxWw",
   authDomain: "gen-lang-client-0460432266.firebaseapp.com",
@@ -55,6 +56,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const database = getDatabase(app);
 const auth = getAuth(app);
+// const storage = getStorage(app); // Storage 초기화 제거
 
 
 // =================================================================
@@ -104,29 +106,48 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
 
 
 // =================================================================
-// 2. 헤더 컴포넌트
+// 2. 헤더 컴포넌트 (로그아웃 버튼 포함)
 // =================================================================
-const Header: React.FC = () => (
+interface HeaderProps {
+  user: User | null;
+  onLogout: () => void;
+}
+
+const Header: React.FC<HeaderProps> = ({ user, onLogout }) => (
   <header className="bg-slate-800 text-white shadow-lg">
     <div className="container mx-auto p-4 flex justify-between items-center">
       <h1 className="text-2xl font-bold tracking-wide">
         서울아레나 관리자 패널
       </h1>
-      <span className="text-sm opacity-75">데이터 관리 시스템 (RTDB)</span>
+      <div className="flex items-center space-x-4">
+        {user && (
+          <span className="text-sm opacity-75 hidden sm:inline">로그인: {user.email}</span>
+        )}
+        {user && (
+          <button 
+            onClick={onLogout}
+            className="bg-red-500 hover:bg-red-600 text-white font-semibold py-1 px-3 rounded-lg text-sm transition duration-200 shadow-md"
+          >
+            로그아웃
+          </button>
+        )}
+      </div>
     </div>
   </header>
 );
 
 // =================================================================
-// 3. 현장 사진 업데이트 컴포넌트
+// 3. 현장 사진 업데이트 컴포넌트 (URL 입력 전용으로 복구)
 // =================================================================
 interface ConstructionUpdateProps {
   currentImage: string;
-  onUpdate: (imageUrl: string) => Promise<void>;
+  // URL만 받도록 타입 복구
+  onUpdate: (imageUrl: string) => Promise<void>; 
 }
 
 const ConstructionUpdate: React.FC<ConstructionUpdateProps> = ({ currentImage, onUpdate }) => {
-  const [imageUrl, setImageUrl] = useState(currentImage);
+  // URL 상태만 사용하도록 복구
+  const [imageUrl, setImageUrl] = useState(currentImage); 
 
   useEffect(() => {
     setImageUrl(currentImage);
@@ -134,6 +155,7 @@ const ConstructionUpdate: React.FC<ConstructionUpdateProps> = ({ currentImage, o
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    // URL만 전달
     onUpdate(imageUrl);
   };
 
@@ -158,6 +180,7 @@ const ConstructionUpdate: React.FC<ConstructionUpdateProps> = ({ currentImage, o
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col space-y-4">
+        {/* URL 직접 입력 필드만 남김 */}
         <div>
           <label htmlFor="image-url" className="block text-sm font-medium text-gray-700 mb-1">
             새 현장 사진 URL
@@ -172,6 +195,7 @@ const ConstructionUpdate: React.FC<ConstructionUpdateProps> = ({ currentImage, o
             required
           />
         </div>
+
         <button
           type="submit"
           className="bg-slate-600 text-white font-bold py-3 rounded-lg hover:bg-slate-700 transition duration-200 shadow-md"
@@ -185,10 +209,11 @@ const ConstructionUpdate: React.FC<ConstructionUpdateProps> = ({ currentImage, o
 
 
 // =================================================================
-// 4. 뉴스 업데이트 컴포넌트
+// 4. 뉴스 업데이트 컴포넌트 (URL 입력 전용으로 복구)
 // =================================================================
 interface NewsUpdateProps {
   articles: NewsArticle[];
+  // URL만 포함된 articleData만 받도록 타입 복구
   onSave: (articleData: Omit<NewsArticle, 'id'>) => Promise<void>;
   onDelete: (articleId: string) => Promise<void>;
 }
@@ -198,10 +223,21 @@ const NewsUpdate: React.FC<NewsUpdateProps> = ({ articles, onSave, onDelete }) =
   const [link, setLink] = useState('');
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [imageUrl, setImageUrl] = useState('');
+  // 파일 상태 제거
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave({ title, link, date, imageUrl });
+    
+    // URL이 없으면 에러 (파일 업로드 로직 제거)
+    if (!imageUrl) {
+      alert("대표 이미지 URL을 반드시 입력해야 합니다.");
+      return;
+    }
+
+    const data: Omit<NewsArticle, 'id'> = { title, link, date, imageUrl };
+    // URL만 포함된 데이터 전달
+    onSave(data); 
+    
     // 입력 필드 초기화
     setTitle('');
     setLink('');
@@ -233,20 +269,23 @@ const NewsUpdate: React.FC<NewsUpdateProps> = ({ articles, onSave, onDelete }) =
           required
         />
         <input
-          type="text"
-          placeholder="대표 이미지 URL (http/https로 시작)"
-          value={imageUrl}
-          onChange={(e) => setImageUrl(e.target.value)}
-          className="w-full p-2 border border-gray-300 rounded-lg"
-          required
-        />
-        <input
           type="date"
           value={date}
           onChange={(e) => setDate(e.target.value)}
           className="w-full p-2 border border-gray-300 rounded-lg"
           required
         />
+        
+        {/* URL 직접 입력 필드만 남김 (필수) */}
+        <input
+            type="text"
+            placeholder="대표 이미지 URL (http/https로 시작)"
+            value={imageUrl}
+            onChange={(e) => setImageUrl(e.target.value)}
+            className="w-full p-2 border border-gray-300 rounded-lg"
+            required
+        />
+
         <button
           type="submit"
           className="w-full bg-blue-500 text-white font-bold py-2 rounded-lg hover:bg-blue-600 transition duration-200"
@@ -310,8 +349,10 @@ const App: React.FC = () => {
     setTimeout(() => setNotification(null), 3000);
   }, []);
   
+  // Storage 파일 업로드 유틸리티 함수 제거
+  
   // -----------------------------------------------------------
-  // 5.1 인증 및 로그인 로직
+  // 5.1 인증 및 로그인/로그아웃 로직
   // -----------------------------------------------------------
   const handleLogin = async (email: string, password: string) => {
     try {
@@ -325,6 +366,16 @@ const App: React.FC = () => {
     }
   };
 
+  const handleLogout = useCallback(async () => {
+    try {
+      await signOut(auth);
+      showNotification('👋 로그아웃 성공!');
+    } catch (error) {
+      console.error("Logout failed:", error);
+      showNotification('❌ 로그아웃 중 오류가 발생했습니다.');
+    }
+  }, [showNotification]);
+
   useEffect(() => {
     // 앱 시작 시 인증 상태 확인
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -336,33 +387,47 @@ const App: React.FC = () => {
 
 
   // -----------------------------------------------------------
-  // 5.2 데이터 업데이트/삭제 핸들러
+  // 5.2 데이터 업데이트/삭제 핸들러 (URL 전용 로직으로 복구)
   // -----------------------------------------------------------
   const handleUpdateConstructionImage = useCallback(async (imageUrl: string) => {
-    if (!imageUrl || typeof imageUrl !== 'string' || !imageUrl.startsWith('http')) {
-      showNotification('❌ 유효한 이미지 URL(http/https로 시작)을 입력해주세요.');
-      return;
-    }
-
     try {
-      const imageRef = ref(database, 'settings/constructionImage');
-      await set(imageRef, imageUrl); 
-      showNotification('✅ 현장 사진 URL이 성공적으로 업데이트되었습니다.');
+        if (!user) {
+            showNotification('❌ 관리자 권한이 없습니다. 먼저 로그인해주세요.');
+            return;
+        }
+
+        // URL 유효성 검사 로직 복구
+        if (!imageUrl || typeof imageUrl !== 'string' || !imageUrl.startsWith('http')) {
+            showNotification('❌ 유효한 이미지 URL(http/https로 시작)을 입력해주세요.');
+            return;
+        }
+
+        const imageRef = ref(database, 'settings/constructionImage');
+        await set(imageRef, imageUrl); 
+        showNotification('✅ 현장 사진 URL이 성공적으로 업데이트되었습니다.');
+        
     } catch (error) {
-      console.error('❌ 공사 현황 업데이트 오류:', error);
-      showNotification('❌ 업데이트 중 오류가 발생했습니다. 콘솔을 확인하세요.');
+        console.error('❌ 공사 현황 업데이트 오류:', error);
+        showNotification('❌ 업데이트 중 오류가 발생했습니다. 콘솔을 확인하세요.');
     }
-  }, [showNotification]);
+  }, [showNotification, user]);
 
   const handleSaveNewsArticle = useCallback(async (articleData: Omit<NewsArticle, 'id'>) => {
     try {
+      if (!user) {
+          showNotification('❌ 관리자 권한이 없습니다. 먼저 로그인해주세요.');
+          return;
+      }
+      
+      // URL 유효성 검사 로직 복구
       if (!articleData.imageUrl || !articleData.imageUrl.startsWith('http')) {
-         showNotification('❌ 뉴스 이미지 URL을 입력해주세요.');
+         showNotification('❌ 뉴스 이미지 URL(http/https로 시작)을 입력해주세요.');
          return;
       }
       
       const articlesRef = ref(database, 'articles');
       const newArticleRef = push(articlesRef);
+      // RTDB에 URL을 포함한 데이터 저장
       await set(newArticleRef, articleData);
       
       showNotification('✅ 뉴스 기사가 성공적으로 추가되었습니다.');
@@ -371,10 +436,14 @@ const App: React.FC = () => {
       console.error('❌ Error adding article:', error);
       showNotification('❌ 뉴스 기사 추가 중 오류가 발생했습니다.');
     }
-  }, [showNotification]);
+  }, [showNotification, user]);
 
   const handleDeleteNewsArticle = useCallback(async (articleId: string) => {
     try {
+      if (!user) {
+          showNotification('❌ 관리자 권한이 없습니다. 먼저 로그인해주세요.');
+          return;
+      }
       const articleRef = ref(database, `articles/${articleId}`);
       await remove(articleRef);
       showNotification('✅ 뉴스 기사가 성공적으로 삭제되었습니다.');
@@ -382,52 +451,50 @@ const App: React.FC = () => {
       console.error('❌ Error deleting article:', error);
       showNotification('❌ 뉴스 기사 삭제 중 오류가 발생했습니다.');
     }
-  }, [showNotification]);
+  }, [showNotification, user]);
 
 
   // -----------------------------------------------------------
   // 5.3 데이터 불러오기 (Read) 로직: RTDB에서 데이터 구독
   // -----------------------------------------------------------
   useEffect(() => {
-    if (user) { // 로그인한 경우에만 데이터 구독 시작
-      // 1. 공사 현황 이미지 URL 구독 (settings/constructionImage 경로)
-      const imageRef = ref(database, 'settings/constructionImage');
-      const unsubscribeImage = onValue(imageRef, (snapshot: DataSnapshot) => {
-        if (snapshot.exists()) {
-          const imageUrl = snapshot.val();
-          if (typeof imageUrl === 'string' && imageUrl.startsWith('http')) {
-            setConstructionImage(imageUrl);
-          } else {
-            setConstructionImage(INITIAL_CONSTRUCTION_IMAGE);
-          }
+    // 1. 공사 현황 이미지 URL 구독 (settings/constructionImage 경로)
+    const imageRef = ref(database, 'settings/constructionImage');
+    const unsubscribeImage = onValue(imageRef, (snapshot: DataSnapshot) => {
+      if (snapshot.exists()) {
+        const imageUrl = snapshot.val();
+        if (typeof imageUrl === 'string' && imageUrl.startsWith('http')) {
+          setConstructionImage(imageUrl);
         } else {
           setConstructionImage(INITIAL_CONSTRUCTION_IMAGE);
         }
-      });
+      } else {
+        setConstructionImage(INITIAL_CONSTRUCTION_IMAGE);
+      }
+    });
 
-      // 2. 뉴스 기사 목록 구독 (articles 경로)
-      const articlesRef = ref(database, 'articles');
-      const unsubscribeArticles = onValue(articlesRef, (snapshot: DataSnapshot) => {
-        if (snapshot.exists()) {
-          const articlesMap = snapshot.val();
-          // 배열로 변환, 유효성 검사 후 날짜 순 정렬
-          const articlesArray = Object.keys(articlesMap).map(key => ({
-            id: key,
-            ...articlesMap[key]
-          } as NewsArticle)).filter(a => a.title && a.link && a.date && a.imageUrl) 
-          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-          setNewsArticles(articlesArray);
-        } else {
-          setNewsArticles(INITIAL_NEWS_ARTICLES);
-        }
-      });
+    // 2. 뉴스 기사 목록 구독 (articles 경로)
+    const articlesRef = ref(database, 'articles');
+    const unsubscribeArticles = onValue(articlesRef, (snapshot: DataSnapshot) => {
+      if (snapshot.exists()) {
+        const articlesMap = snapshot.val();
+        // 배열로 변환, 유효성 검사 후 날짜 순 정렬
+        const articlesArray = Object.keys(articlesMap).map(key => ({
+          id: key,
+          ...articlesMap[key]
+        } as NewsArticle)).filter(a => a.title && a.link && a.date && a.imageUrl) 
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        setNewsArticles(articlesArray);
+      } else {
+        setNewsArticles(INITIAL_NEWS_ARTICLES);
+      }
+    });
 
-      return () => {
-        unsubscribeImage();
-        unsubscribeArticles();
-      };
-    }
-  }, [user]); // user 상태가 변경될 때마다 재실행
+    return () => {
+      unsubscribeImage();
+      unsubscribeArticles();
+    };
+  }, []); 
 
   // -----------------------------------------------------------
   // 5.4 렌더링 (로그인 상태에 따라 분기)
@@ -442,7 +509,7 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 text-brand-gray-900 font-sans">
-      <Header />
+      <Header user={user} onLogout={handleLogout} />
       <main className="container mx-auto p-4 md:p-8">
         <div className="grid grid-cols-1 gap-12 max-w-4xl mx-auto">
           {/* ConstructionUpdate: 현장 사진 URL 관리 */}
